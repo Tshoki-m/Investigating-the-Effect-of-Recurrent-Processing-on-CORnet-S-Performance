@@ -1,0 +1,124 @@
+\documentclass[conference]{IEEEtran}
+\usepackage{graphicx,booktabs,xcolor,amsmath,hyperref}
+\graphicspath{{figures/}{../results/}}
+\newcommand{\todo}[1]{\textcolor{red}{\textbf{[TODO: #1]}}}
+\newcommand{\repo}{\url{https://github.com/Tshoki-m/Investigating-the-Effect-of-Recurrent-Processing-on-CORnet-S-Performance}}
+
+\begin{document}
+\title{Investigating the Effect of Recurrent Processing on CORnet-S Performance: A Partial Reproduction}
+\author{\IEEEauthorblockN{\todo{Your name}}
+\IEEEauthorblockA{\todo{Student number, course, University of the Witwatersrand}}}
+\maketitle
+
+\begin{abstract}
+Kubilius et al.\ report that recurrence is the main predictive factor of ImageNet top-1 accuracy in CORnet-S. I re-implemented CORnet-S and trained four variants with 1/1/1, 2/2/2, 2/4/2 and 4/4/4 recurrent steps in V2/V4/IT under one shared recipe. Because full ImageNet was out of reach, I used a reduced protocol (Tiny-ImageNet, 64$\times$64, 200 classes). The paper's trend did \emph{not} reproduce: with one seed per configuration, the non-recurrent model scored highest (+1.25 points over the 2/4/2 baseline) and 4/4/4 lowest ($-2.85$), against the paper's $-7$ and $0$. The result is best read as no detected benefit of recurrence in a small-data, low-resolution regime, not as evidence against the full-scale finding. Code: \repo
+\end{abstract}
+
+\section{Introduction and claim reproduced}
+CORnet-S is a shallow network with four areas mapped to the ventral visual stream (V1, V2, V4, IT). V1 is feed-forward; V2, V4 and IT are recurrent, meaning the output of an area is passed back through the same weights several times while BatchNorm layers are kept separate per step \cite{kubilius2019}. The baseline repeats V2 twice, V4 four times and IT twice (2/4/2).
+
+The claim I target is in the abstract and Sec.~4.3 of the paper: ``recurrence is the main predictive factor of both Brain-Score and ImageNet top-1 performance''. Its quantitative support is Fig.~4, row~1, which lists the change in ImageNet top-1 relative to 2/4/2 for different step counts in V2/V4/IT: $-7$ points with no recurrence (1/1/1), $-1$ for 2/2/2, and no change for 4/4/4, 4/8/4 and 10/10/10. These values were read from the figure text and should be checked against the rendered figure. The paper varies the three areas together as a triplet. My question is: \emph{how does the number of recurrent steps affect top-1 accuracy in CORnet-S?} I do not attempt the Brain-Score analyses.
+
+\section{Method}
+\subsection{Re-implementation}
+I \emph{re-implemented} CORnet-S in PyTorch rather than using the authors' training code, with the number of steps per area as a constructor argument. Module names follow the official implementation, and the official pretrained weights load into my model under strict key matching, so parameter names and shapes agree. The model has about 53.4M parameters in every variant (53.39M for 1/1/1 to 53.44M for 4/4/4; the small difference is per-step BatchNorm). \todo{state result of the numerical output comparison against the official model (src/check\_against\_official.py): max abs difference and whether it passed; if not run, say so}
+
+
+\subsection{Architecture details}
+V1 applies a $7\times7$ convolution with stride 2, a $3\times3$ max-pool with stride 2 and a $3\times3$ convolution. V2, V4 and IT (128, 256 and 512 channels) share one circuit: a $1\times1$ input convolution, then at each step a $1\times1$ convolution expanding the channels fourfold, a $3\times3$ bottleneck convolution, and a $1\times1$ convolution back, each followed by BatchNorm and ReLU, plus a skip connection. The first step of an area downsamples by a stride of 2 (and the skip path uses a strided $1\times1$ convolution); later steps keep the resolution and feed the area's output back in as its new input. All steps of an area share convolution weights but have their own BatchNorm. A global average pool and a linear layer form the decoder. With a $64\times64$ input the feature maps entering V2, V4, IT and the decoder are $16\times16$, $8\times8$, $4\times4$ and $2\times2$, which matters when interpreting the results below.
+\subsection{Protocol and deviations}
+All variants are trained from scratch with identical hyperparameters, as in the paper. Table~\ref{tab:protocol} lists where my setup differs from the paper's.
+
+\begin{table}[t]
+\caption{Training protocol: paper versus this reproduction.}
+\label{tab:protocol}
+\centering\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & Paper & Here \\
+\midrule
+Data & ImageNet, 1000 cl. & Tiny-ImageNet, 200 cl. \\
+Train/val images & 1.28M / 50k & 100k / 10k \\
+Resolution & 224$\times$224 & 64$\times$64 \\
+Epochs, batch & 43, 256 & 43, 256 \\
+Optimizer & SGD, mom.\ 0.9 & SGD, mom.\ 0.9 \\
+LR schedule & 0.1, $\div$10 / 20 ep. & same \\
+Weight decay & not stated & 1e-4 (assumed) \\
+Augmentation & crop, flip & RandResizedCrop (min 0.35), flip \\
+Precision & not stated & mixed (AMP) \\
+Reported epoch & max Brain-Score & final epoch \\
+Seeds & not stated & 1 per config. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Tiny-ImageNet \cite{tinyimagenet} was chosen because it fits Colab's disk and its two CPU cores, which make decoding full-size ImageNet a bottleneck. At 64 pixels the final feature map is only $2\times2$. I report the last-epoch validation top-1 rather than selecting the best epoch on the validation set, which would bias the comparison. Training ran on a Google Colab GPU. A single command reproduces all numbers and figures from a clean checkout (README).
+
+\section{Results}
+Table~\ref{tab:results} places my numbers next to the paper's, and Fig.~\ref{fig:delta} plots the change against the baseline.
+
+\begin{table}[t]
+\caption{Top-1 on Tiny-ImageNet validation (last epoch, one seed). $\Delta$ is relative to 2/4/2.}
+\label{tab:results}
+\centering\small
+\begin{tabular}{@{}lccccc@{}}
+\toprule
+V2/V4/IT & Steps & Params (M) & Top-1 (\%) & $\Delta$ & Paper $\Delta$ \\
+\midrule
+1/1/1 & 3 & 53.39 & 49.11 & +1.25 & $-7$ \\
+2/2/2 & 6 & 53.41 & 48.14 & +0.28 & $-1$ \\
+2/4/2 & 8 & 53.42 & 47.86 & 0 & 0 \\
+4/4/4 & 12 & 53.44 & 45.01 & $-2.85$ & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.85\columnwidth]{recurrence_ablation.png}
+\caption{Change in top-1 relative to the 2/4/2 baseline: this reproduction (one seed, no error bars) versus the paper's Fig.~4 values.}
+\label{fig:delta}
+\end{figure}
+
+
+\textbf{How to read the differences.} Each accuracy is measured on 10{,}000 validation images, so its binomial standard error is about $\sqrt{p(1-p)/N}\approx0.5$ points near 48\%. A gap of one point between two configurations is therefore only about 1.4 standard errors of the difference, even before run-to-run training variance, which a single seed cannot estimate. I use this to rank the evidence: the 4/4/4 gap ($-2.85$) is about four standard errors and the most credible, the 1/1/1 gap ($+1.25$) is borderline, and the 2/2/2 gap ($+0.28$) is not distinguishable from zero. More seeds would also separate training noise from a real effect of recurrence.
+
+\textbf{Numbers the paper does not report.} The paper gives only differences relative to the baseline. This reproduction adds (i) absolute accuracies of 45.0--49.1\% for each variant on Tiny-ImageNet, (ii) parameter counts that are nearly identical across variants, so the variants differ in computation rather than capacity, (iii) accuracy that falls monotonically with total recurrent steps (3, 6, 8, 12 steps give 49.1, 48.1, 47.9, 45.0), and (iv) a sampling uncertainty of about $\pm0.5$ points per accuracy, from the binomial error on 10{,}000 validation images, and about $\pm0.7$ for a difference between two configurations. \todo{add final train loss per configuration and, if available, seed standard deviations from results/summary.txt}
+
+Training curves are in Fig.~\ref{fig:curves}. \todo{one or two sentences describing what Fig. 2 shows: does 4/4/4 reach the lowest training loss but the lowest validation accuracy (overfitting), or a higher training loss (optimization difficulty)? Only claim what the plot shows}
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.85\textwidth]{training_curves.png}
+\caption{Training loss (left) and validation top-1 (right) per epoch for each variant.}
+\label{fig:curves}
+\end{figure*}
+
+\section{What did not reproduce}
+The central finding did not reproduce. The paper reports a large drop without recurrence; I found the opposite ordering, with the feed-forward 1/1/1 variant best and accuracy declining as steps increased. The paper's plateau above 2/4/2 also did not appear: 4/4/4 was worse than the baseline by 2.85 points.
+
+With one seed per configuration, only the 4/4/4 gap is plausibly larger than noise. The +0.28 gap is indistinguishable from zero given the $\pm0.7$ point uncertainty of a difference, and the +1.25 gap is borderline. The honest statement is therefore that \emph{no benefit of recurrence was detected} in this regime, and that deeper unrolling probably hurt.
+
+\textbf{Possible explanations} are hypotheses I did not test:
+\begin{enumerate}
+\item \emph{Data regime.} The paper trains on 1.28M images, 1000 classes and $224\times224$ inputs. Here there are 100k images, 200 classes and a $2\times2$ final map, so extra iterations at V4 and IT may add little spatial refinement while making the unrolled network harder to optimize or easier to overfit. Because the weights are shared, every extra step lengthens the path that gradients must travel through the same parameters, and the monotonic fall in accuracy with total steps (Table~\ref{tab:results}) is what such an optimization or overfitting effect would produce, although one seed cannot establish it.
+\item \emph{Untuned shared hyperparameters.} All variants shared one recipe, as in the paper, which itself notes that tuning could shrink differences. This caveat is likely stronger with less data.
+\item \emph{Recurrence confounded with depth.} With shared weights, 1/1/1 has about the same parameters as 2/4/2 but far less computation, so the paper's $-7$ mixes less recurrence with a shallower effective network \cite{liao2016}. The paper does not separate the two.
+\item \emph{Protocol differences}, such as augmentation scale, mixed precision, the assumed weight decay and final-epoch reporting, which could shift absolute numbers but are unlikely on their own to reverse a trend.
+\end{enumerate}
+
+
+\section{Reproducibility}
+The repository contains a README, a conda \texttt{environment.yml}, and a single command, \texttt{python reproduce.py}, that downloads Tiny-ImageNet, trains the four configurations with the protocol of Table~\ref{tab:protocol}, and regenerates every table, number and figure in this report. Training needs a GPU and takes hours, so the finished run histories are committed and \texttt{python reproduce.py --skip-training} rebuilds all tables and figures from them in seconds without data or a GPU. Interrupted runs resume from checkpoints, finished runs are skipped, and extra seeds are added with \texttt{--seeds}. \todo{state the GPU model used on Colab and the approximate wall-clock time per run}
+\section{Limitations}
+(i) One seed per configuration, so differences below about one point cannot be interpreted. (ii) A reduced dataset and resolution, so the results do not bear directly on the full-ImageNet claim. (iii) Only top-1 was measured; Brain-Score was out of scope. (iv) The paper's numbers were read from the figure text. (v) The original proposal planned to start from the authors' implementation and pretrained model, but because the paper's ablation needs separately trained variants, I trained re-implemented variants from scratch and used the official model only to validate the re-implementation.
+
+\section{Conclusion}
+In a reduced Tiny-ImageNet setting, I found no benefit of recurrent processing for top-1 accuracy in CORnet-S and a decline at 4/4/4. This does not contradict the paper's full-scale result because the regime differs substantially, but it shows the reported benefit is not robust to a drop in data scale and resolution under a shared untuned recipe. The most informative next steps are running more seeds, repeating the ablation at a regime closer to the paper's (ImageNet-100 at higher resolution), and adding a matched-depth feed-forward control to separate recurrence from depth. \todo{if you ran extra seeds before submission, update the abstract, Table II and Sec. V accordingly}
+
+\begin{thebibliography}{1}
+\bibitem{kubilius2019} J.~Kubilius, M.~Schrimpf, K.~Kar, \emph{et al.}, ``Brain-like object recognition with high-performing shallow recurrent ANNs,'' in \emph{Adv.\ Neural Inf.\ Process.\ Syst.\ (NeurIPS)}, 2019.
+\bibitem{tinyimagenet} Y.~Le and X.~Yang, ``Tiny ImageNet visual recognition challenge,'' CS 231N, Stanford University, 2015.
+\bibitem{liao2016} Q.~Liao and T.~Poggio, ``Bridging the gaps between residual learning, recurrent neural networks and visual cortex,'' arXiv:1604.03640, 2016.
+\end{thebibliography}
+\end{document}
