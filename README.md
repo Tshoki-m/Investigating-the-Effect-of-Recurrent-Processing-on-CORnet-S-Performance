@@ -14,6 +14,9 @@ did **not** reproduce in this setting; see the report in `report/`.
     conda env create -f environment.yml
     conda activate cornet-repro
 
+`environment.yml` must pin the versions actually used for the reported runs: generate it in the Colab session that
+produced the results with `python src/print_env.py > environment.yml` and commit it.
+
 ## One command to reproduce every number and figure
     python reproduce.py
 
@@ -26,8 +29,11 @@ It needs a CUDA GPU and takes hours; interrupted runs resume from checkpoints an
 
     python reproduce.py --skip-training
 
-regenerates every table, number and figure in the report in seconds, with no GPU or data download.
-Extra seeds: `python reproduce.py --seeds 0 1 2`.
+regenerates every table, number and figure in the report in seconds, with no GPU or data download. The full command
+additionally runs the numerical equivalence check against the official model (`results/equivalence_check.txt`, needs
+internet); its committed output is the number quoted in the report.
+Extra seeds: `python reproduce.py --seeds 0 1 2`. Larger-final-map variant (V1 max-pool removed): `python reproduce.py --variant nopool`
+(histories in `results/runs_nopool/`, outputs in `results_nopool/`).
 
 ## Provenance of the committed results
 The histories in `results/runs/` come from running the same `src/train.py` commands that `reproduce.py`
