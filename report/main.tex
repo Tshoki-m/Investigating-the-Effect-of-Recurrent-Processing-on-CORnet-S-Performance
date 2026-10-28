@@ -56,21 +56,21 @@ Seeds & not stated & 1 per config. \\
 \end{tabular}
 \end{table}
 
-Tiny-ImageNet \cite{tinyimagenet} was chosen because full ImageNet exceeds Colab's disk and its two CPU cores. I report last-epoch validation top-1 rather than selecting the best epoch on the validation set, which would bias the comparison. Total steps per variant are 3, 6, 8 and 12, with parameter counts nearly identical (about 53.4M), so variants differ in computation rather than capacity.
+Tiny-ImageNet \cite{tinyimagenet} was chosen because full ImageNet exceeds Colab's disk and its two CPU cores. I report last-epoch validation top-1 rather than selecting the best epoch on the validation set, which would bias the comparison. Total steps per variant are 3, 6, 8 and 12, with parameter counts nearly identical (about 53.0M), so variants differ in computation rather than capacity.
 
 \section{Numbers next to the paper's}
 \begin{table}[t]
-\caption{Top-1 on Tiny-ImageNet validation (last epoch, one seed). $\Delta$ is relative to 2/4/2; paper $\Delta$ is ImageNet top-1 from Fig.~4.}
+\caption{Top-1 on Tiny-ImageNet validation (last epoch, one seed). $\Delta$ is relative to 2/4/2; paper $\Delta$ is ImageNet top-1 from Fig.~4; train loss is the mean loss over the last epoch (under augmentation).}
 \label{tab:results}
 \centering\small
-\begin{tabular}{@{}lccccc@{}}
+\begin{tabular}{@{}lccccc c@{}}
 \toprule
-V2/V4/IT & Steps & Params (M) & Top-1 (\%) & $\Delta$ & Paper $\Delta$ \\
+V2/V4/IT & Steps & Params (M) & Top-1 (\%) & $\Delta$ & Paper $\Delta$ & Train loss \\
 \midrule
-1/1/1 & 3 & 53.39 & 49.11 & +1.25 & $-7$ \\
-2/2/2 & 6 & 53.41 & 48.14 & +0.28 & $-1$ \\
-2/4/2 & 8 & 53.42 & 47.86 & 0 & 0 \\
-4/4/4 & 12 & 53.44 & 45.01 & $-2.85$ & 0 \\
+1/1/1 & 3 & 52.98 & 49.11 & +1.25 & $-7$ & 0.86 \\
+2/2/2 & 6 & 53.00 & 48.14 & +0.28 & $-1$ & 0.73 \\
+2/4/2 & 8 & 53.01 & 47.86 & 0 & 0 & 0.78 \\
+4/4/4 & 12 & 53.03 & 45.01 & $-2.85$ & 0 & 1.19 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -84,14 +84,14 @@ V2/V4/IT & Steps & Params (M) & Top-1 (\%) & $\Delta$ & Paper $\Delta$ \\
 
 The comparison is not like for like, because the dataset, resolution, class count and feature-map size all differ (Table~\ref{tab:protocol}); it asks whether the \emph{direction and rough size} of the effect survive the change of regime.
 
-\textbf{Numbers the paper does not report.} (i) Absolute accuracies of 45.0--49.1\% per variant. (ii) Accuracy falls monotonically with total recurrent steps (3, 6, 8, 12 steps give 49.1, 48.1, 47.9, 45.0). (iii) A sampling uncertainty of about $\pm0.5$ points per accuracy, from the binomial error on 10{,}000 validation images, hence about $\pm0.7$ for a difference between two configurations. \todo{add final train loss per configuration, and seed standard deviations if you ran extra seeds (results/summary.txt)}
+\textbf{Numbers the paper does not report.} (i) Absolute accuracies of 45.0--49.1\% per variant. (ii) Accuracy falls monotonically with total recurrent steps (3, 6, 8, 12 steps give 49.1, 48.1, 47.9, 45.0). (iii) A sampling uncertainty of about $\pm0.5$ points per accuracy, from the binomial error on 10{,}000 validation images, hence about $\pm0.7$ for a difference between two configurations. (iv) Final-epoch training loss of 0.86, 0.73, 0.78 and 1.19 for 1/1/1, 2/2/2, 2/4/2 and 4/4/4 (Table~\ref{tab:results}). (v) Best-epoch validation top-1 of 49.19, 48.49, 47.96 and 45.01, within 0.4 points of the last-epoch values, so reporting the last epoch does not change the ranking.
 
 \textbf{How to read the differences.} A one-point gap is only about 1.4 standard errors of the difference, before training variance, which one seed cannot estimate. The 4/4/4 gap ($-2.85$) is about four standard errors and the most credible; the 1/1/1 gap (+1.25) is borderline; the 2/2/2 gap (+0.28) is indistinguishable from zero.
 
 \section{The gap: what did not reproduce}
 The central effect did not reproduce. The paper reports a large drop without recurrence; I found the opposite ordering, with the feed-forward 1/1/1 variant best and accuracy declining as steps increased. The paper's plateau above 2/4/2 did not appear either: 4/4/4 fell $2.85$ points below baseline. The honest statement is that \emph{no benefit of recurrence was detected} in this regime and that deeper unrolling probably hurt.
 
-\textbf{What I tried.} Beyond the four runs above: \todo{list only what you actually ran, with results: training curves (Fig.~\ref{fig:curves}), extra seeds, the no-pool variant (results\_nopool/). If you ran none, write ``nothing beyond the four runs''}
+\textbf{What I tried.} Beyond the four runs, I analysed their saved training histories: final training loss, best-epoch accuracy and the per-epoch curves (Fig.~\ref{fig:curves}). I did not run extra seeds or any other variant. \todo{if you ran extra seeds or the no-pool variant (results\_nopool/) before submitting, describe them here and update the abstract and Table II; otherwise delete this note}
 
 \begin{figure*}[t]
 \centering
@@ -100,9 +100,11 @@ The central effect did not reproduce. The paper reports a large drop without rec
 \label{fig:curves}
 \end{figure*}
 
+\textbf{What the training losses show.} 4/4/4 has the \emph{highest} final training loss (1.19) as well as the lowest validation accuracy, and its best validation accuracy occurs at the last epoch, so it is not overfitting; it fits the data worse and probably had not converged under this schedule, which points to an optimization difficulty. The picture is different for the other variants: 2/2/2 and 2/4/2 reach a lower training loss than 1/1/1 (0.73 and 0.78 against 0.86) yet a lower validation accuracy, which is consistent with a larger generalization gap, but these differences are within what one seed and a 10{,}000-image validation set can resolve. The training loss is an average under augmentation, not an evaluation of the training set. \todo{add one sentence describing what Fig.~\ref{fig:curves} shows, only what is visible}
+
 \textbf{What I cannot explain.} I have hypotheses but have not tested them:
 \begin{enumerate}
-\item \emph{Data regime.} The paper uses 1.28M images, 1000 classes and $224\times224$ inputs; here there are 100k images, 200 classes and a $2\times2$ final map. Extra iterations at V4 and IT may add little spatial refinement while making the unrolled network harder to optimize or easier to overfit. Because weights are shared, each extra step lengthens the path gradients take through the same parameters, and the monotonic fall in accuracy with total steps is what such an effect would produce, though one seed cannot establish it.
+\item \emph{Data regime.} The paper uses 1.28M images, 1000 classes and $224\times224$ inputs; here there are 100k images, 200 classes and a $2\times2$ final map. Extra iterations at V4 and IT may add little spatial refinement while making the unrolled network harder to optimize. Because weights are shared, each extra step lengthens the path gradients take through the same parameters, which fits the high training loss of 4/4/4, though one seed cannot establish it and it does not explain why 1/1/1 generalizes better than 2/2/2 and 2/4/2.
 \item \emph{Untuned shared hyperparameters}, which the paper itself flags as a caveat; it is likely stronger with less data.
 \item \emph{Recurrence confounded with depth.} With shared weights, 1/1/1 has about the same parameters as 2/4/2 but far less computation, so the paper's $-7$ mixes less recurrence with a shallower effective network \cite{liao2016}.
 \item \emph{Protocol differences} (augmentation scale, mixed precision, assumed weight decay, final-epoch reporting), which could shift absolute numbers but are unlikely alone to reverse a trend.
